@@ -20,9 +20,11 @@ def get_image_url(args):
     wd = webdriver.Chrome(executable_path='./chromedriver', chrome_options=opt)
     wd.get(search_url.format(q=query))
     thumbnail_results = wd.find_elements_by_css_selector("img.rg_i")
+    if len(thumbnail_results) < download_num:
+        raise ValueError("image results: {}, download_count {}".format(len(thumbnail_results), download_num))
     
     image_urls = set()
-    for img in thumbnail_results[:download_num]:
+    for i, img in enumerate(thumbnail_results[:download_num]):
         try:
             img.click()
             time.sleep(sleep_between_interactions)
@@ -33,6 +35,7 @@ def get_image_url(args):
             url = candidate.get_attribute('src')
             if url and 'https' in url:
                 image_urls.add(url)
+        print('get : ' + str(i))
     time.sleep(sleep_between_interactions+3)
     wd.quit()
 
@@ -50,7 +53,7 @@ def url2image(url):
         return image
 
     except Exception as e:
-        print("ERROR - Could not save {url} - {e}".fromat(url=url, e=e))
+        print("ERROR - Could not save {url} - {e}".format(url=url, e=e))
     
     
 
@@ -59,18 +62,16 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='検索して保存するやつ')
     parser.add_argument('k', help='検索キーワード')
-    parser.add_argument('-c', '--count', help='上位N個の画像', default=3)
+    parser.add_argument('-c', '--count', help='上位N個の画像', default=3, type=int)
     parser.add_argument('-o', '--output_dir', help='出力先ディレクトリ名', default='data')
     parser.add_argument('-l', '--log', help='ログ', default='logs.txt')
-
 
     args = parser.parse_args()
 
     log = open(args.log, 'a')
 
-
-
     image_urls = get_image_url(args)
+    print('finish get_image_url')
 
     if not os.path.exists(args.output_dir):
         os.mkdir(args.output_dir)
@@ -80,7 +81,13 @@ if __name__ == '__main__':
         output_name = os.path.join(args.output_dir, str(i) + '.jpg')
         now = str(datetime.datetime.now())
         with open(output_name, 'wb') as f:
-            img.save(f, "JPEG", quality=90)
+            try:
+                img.save(f, "JPEG", quality=90)
+            except AttributeError:
+                print("file corrupt: " + output_name)
+                log.write(now + ',' + output_name + ',' + url + ',FAILED\n')
+                continue
+
             print('saved ' + output_name)
-            log.write(now + ',' + output_name + ',' + url + '\n')
-    print('save log ' + args.output_dir)
+            log.write(now + ',' + output_name + ',' + url + ',SUCCESS\n')
+    print('save log ' + args.log)
